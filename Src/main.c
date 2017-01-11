@@ -1,0 +1,277 @@
+/**
+  ******************************************************************************
+  * File Name          : main.c
+  * Description        : Main program body
+  ******************************************************************************
+  *
+  * COPYRIGHT(c) 2016 STMicroelectronics
+  *
+  * Redistribution and use in source and binary forms, with or without modification,
+  * are permitted provided that the following conditions are met:
+  *   1. Redistributions of source code must retain the above copyright notice,
+  *      this list of conditions and the following disclaimer.
+  *   2. Redistributions in binary form must reproduce the above copyright notice,
+  *      this list of conditions and the following disclaimer in the documentation
+  *      and/or other materials provided with the distribution.
+  *   3. Neither the name of STMicroelectronics nor the names of its contributors
+  *      may be used to endorse or promote products derived from this software
+  *      without specific prior written permission.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  *
+  ******************************************************************************
+  */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "stm32f3xx_hal.h"
+#include "i2c.h"
+#include "gpio.h"
+
+/* USER CODE BEGIN Includes */
+#include "stm32_tm1637.h"
+#include "RTC.h"
+/* USER CODE END Includes */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+/* Private variables ---------------------------------------------------------*/
+int seconds, minutes, hours;
+uint8_t aTxBuffer[8];
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+void Error_Handler(void);
+
+/* USER CODE BEGIN PFP */
+/* Private function prototypes -----------------------------------------------*/
+const int TIME_MODE = 0;
+const int SEC_MODE = 1;
+const int SET_MODE = 2;
+const int ALARM_MODE = 3;
+volatile int clk_mode = 0;
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	printf("%d\n", clk_mode);
+	if(clk_mode == TIME_MODE){
+		if(GPIO_Pin == DOWN_SEC_Pin)
+		{
+			while(HAL_GPIO_ReadPin(DOWN_SEC_GPIO_Port, DOWN_SEC_Pin) == GPIO_PIN_SET)
+			{
+				HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
+				seconds = RTC_ConvertFromDec(aTxBuffer[0]);
+				tm1637DisplaySeconds(seconds, 1);
+			}
+		}
+		else if(GPIO_Pin == UP_TEMP_Pin)
+		{
+			while(HAL_GPIO_ReadPin(UP_TEMP_GPIO_Port, UP_TEMP_Pin) == GPIO_PIN_SET)
+			{
+				HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X11, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 500);
+				int MSB = aTxBuffer[0];
+				int LSB = aTxBuffer[1];
+				int temperature =  MSB +((LSB >> 6) * 0.25) * -1;
+				printf("%d\n", temperature);
+				tm1637Display(MSB, 1);
+			}
+		}
+		else if(GPIO_Pin == TIME_Pin)
+		{
+			clk_mode = SET_MODE;
+		}
+		else if(GPIO_Pin == ALARM_Pin){
+			clk_mode = ALARM_MODE;
+		}
+	}
+	else if(GPIO_Pin == TIME_Pin) {
+		clk_mode = TIME_MODE;
+		aTxBuffer[0] = RTC_ConvertFromBinDec(seconds);
+		aTxBuffer[1] = RTC_ConvertFromBinDec(minutes);
+		aTxBuffer[2] = RTC_ConvertFromBinDec(hours);
+		HAL_I2C_Mem_Write(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
+	}
+	else if(GPIO_Pin == ALARM_Pin) {
+		clk_mode = TIME_MODE;
+	}
+}
+
+/* USER CODE END PFP */
+
+/* USER CODE BEGIN 0 */
+/* USER CODE END 0 */
+
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+  /* USER CODE END 1 */
+
+  /* MCU Configuration----------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* Initialize all configured periphe
+   *
+   * rals */
+  MX_GPIO_Init();
+  MX_I2C2_Init();
+
+  /* USER CODE BEGIN 2 */
+  tm1637Init();
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+		//tm1637DisplayDecimal(2, 1);
+		//tm1637DisplayDecimal(i, 1);
+		//i++;
+
+		HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
+		seconds = RTC_ConvertFromDec(aTxBuffer[0]);
+		minutes = RTC_ConvertFromDec(aTxBuffer[1]);
+		hours = RTC_ConvertFromDec(aTxBuffer[2]);
+		while(clk_mode == SET_MODE || clk_mode == ALARM_MODE)
+		{
+			HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
+			if(HAL_GPIO_ReadPin(DOWN_SEC_GPIO_Port, DOWN_SEC_Pin)){
+				hours++;
+				hours%=24;
+			}
+			if(HAL_GPIO_ReadPin(UP_TEMP_GPIO_Port, UP_TEMP_Pin)){
+				minutes++;
+				minutes%=60;
+			}
+			seconds = RTC_ConvertFromDec(aTxBuffer[0]);
+			tm1637DisplayTime(hours, minutes, seconds%2);
+			HAL_Delay(100);
+		}
+
+		tm1637DisplayTime(hours, minutes, 1);
+
+  /* USER CODE END WHILE */
+
+  /* USER CODE BEGIN 3 */
+
+  }
+  /* USER CODE END 3 */
+
+}
+
+/** System Clock Configuration
+*/
+void SystemClock_Config(void)
+{
+
+  RCC_OscInitTypeDef RCC_OscInitStruct;
+  RCC_ClkInitTypeDef RCC_ClkInitStruct;
+  RCC_PeriphCLKInitTypeDef PeriphClkInit;
+
+    /**Initializes the CPU, AHB and APB busses clocks 
+    */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = 16;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL16;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+    /**Initializes the CPU, AHB and APB busses clocks 
+    */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_I2C2;
+  PeriphClkInit.I2c2ClockSelection = RCC_I2C2CLKSOURCE_HSI;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+    /**Configure the Systick interrupt time 
+    */
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+
+    /**Configure the Systick 
+    */
+  HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
+
+  /* SysTick_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @param  None
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler */
+  /* User can add his own implementation to report the HAL error return state */
+  while(1) 
+  {
+  }
+  /* USER CODE END Error_Handler */ 
+}
+
+#ifdef USE_FULL_ASSERT
+
+/**
+   * @brief Reports the name of the source file and the source line number
+   * where the assert_param error has occurred.
+   * @param file: pointer to the source file name
+   * @param line: assert_param error line source number
+   * @retval None
+   */
+void assert_failed(uint8_t* file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+    ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+
+}
+
+#endif
+
+/**
+  * @}
+  */ 
+
+/**
+  * @}
+*/ 
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

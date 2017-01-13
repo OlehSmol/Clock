@@ -4,7 +4,7 @@
   * Description        : This file contains the common defines of the application
   ******************************************************************************
   *
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -41,6 +41,8 @@
 
 /* Private define ------------------------------------------------------------*/
 
+#define ALARM_BIP_Pin GPIO_PIN_15
+#define ALARM_BIP_GPIO_Port GPIOD
 #define TIME_Pin GPIO_PIN_6
 #define TIME_GPIO_Port GPIOC
 #define DOWN_SEC_Pin GPIO_PIN_7

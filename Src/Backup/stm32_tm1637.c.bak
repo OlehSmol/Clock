@@ -53,7 +53,47 @@ void tm1637DisplayDecimal(int v, int displaySeparator)
         v /= 10;
     }
 
-    _tm1637Start();
+    tm1637Display(digitArr);
+}
+
+void tm1637DisplayTime(int first, int second, int displaySeparator)
+{
+    unsigned char digitArr[4];
+    for (int i = 0; i < 2; ++i) {
+		digitArr[i] = segmentMap[second % 10];
+		second /= 10;
+	}
+    for (int i = 2; i < 4; ++i) {
+        digitArr[i] = segmentMap[first % 10];
+        first /= 10;
+    }
+    if (displaySeparator) {
+		digitArr[2] |= 1 << 7;
+	}
+
+    tm1637Display(digitArr);
+}
+
+void tm1637DisplaySeconds(int second, int displaySeparator)
+{
+    unsigned char digitArr[4];
+    for (int i = 0; i < 2; ++i) {
+		digitArr[i] = segmentMap[second % 10];
+		second /= 10;
+	}
+    digitArr[2] = 0x00;
+    digitArr[3] = 0x00;
+
+    if (displaySeparator) {
+		digitArr[2] |= 1 << 7;
+	}
+
+    tm1637Display(digitArr);
+}
+
+void tm1637Display(unsigned char digitArr[4])
+{
+	_tm1637Start();
     _tm1637WriteByte(0x40);
     _tm1637ReadResult();
     _tm1637Stop();
@@ -69,6 +109,7 @@ void tm1637DisplayDecimal(int v, int displaySeparator)
 
     _tm1637Stop();
 }
+
 
 // Valid brightness values: 0 - 8.
 // 0 = display off.

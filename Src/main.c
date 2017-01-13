@@ -4,7 +4,7 @@
   * Description        : Main program body
   ******************************************************************************
   *
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -59,7 +59,10 @@ const int TIME_MODE = 0;
 const int SEC_MODE = 1;
 const int SET_MODE = 2;
 const int ALARM_MODE = 3;
+const int BIP_MODE = 4;
+
 volatile int clk_mode = 0;
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	printf("%d\n", clk_mode);
@@ -77,12 +80,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		{
 			while(HAL_GPIO_ReadPin(UP_TEMP_GPIO_Port, UP_TEMP_Pin) == GPIO_PIN_SET)
 			{
-				HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X11, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 500);
+				HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)(0X11), I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 500);
 				int MSB = aTxBuffer[0];
 				int LSB = aTxBuffer[1];
-				int temperature =  MSB +((LSB >> 6) * 0.25) * -1;
+				int temperature =  (MSB << 8)/256;
 				printf("%d\n", temperature);
-				tm1637Display(MSB, 1);
+				tm1637DisplaySeconds(temperature, 1);
 			}
 		}
 		else if(GPIO_Pin == TIME_Pin)
@@ -90,17 +93,25 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 			clk_mode = SET_MODE;
 		}
 		else if(GPIO_Pin == ALARM_Pin){
+			printf("%d %d", minutes, hours);
 			clk_mode = ALARM_MODE;
 		}
 	}
-	else if(GPIO_Pin == TIME_Pin) {
+	else if(clk_mode == BIP_MODE){
 		clk_mode = TIME_MODE;
+	}
+	else if(GPIO_Pin == TIME_Pin) {
 		aTxBuffer[0] = RTC_ConvertFromBinDec(seconds);
 		aTxBuffer[1] = RTC_ConvertFromBinDec(minutes);
 		aTxBuffer[2] = RTC_ConvertFromBinDec(hours);
-		HAL_I2C_Mem_Write(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
+		HAL_I2C_Mem_Write(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 3, 500);
+		clk_mode = TIME_MODE;
 	}
 	else if(GPIO_Pin == ALARM_Pin) {
+		aTxBuffer[0] = RTC_ConvertFromBinDec(0);
+		aTxBuffer[1] = RTC_ConvertFromBinDec(minutes);
+		aTxBuffer[2] = RTC_ConvertFromBinDec(hours);
+		HAL_I2C_Mem_Write(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X07, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 3, 500);
 		clk_mode = TIME_MODE;
 	}
 }
@@ -112,6 +123,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
 
@@ -123,9 +135,7 @@ int main(void)
   /* Configure the system clock */
   SystemClock_Config();
 
-  /* Initialize all configured periphe
-   *
-   * rals */
+  /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C2_Init();
 
@@ -141,10 +151,21 @@ int main(void)
 		//tm1637DisplayDecimal(i, 1);
 		//i++;
 
+		/*while(1){
+			HAL_GPIO_WritePin(ALARM_BIP_GPIO_Port, ALARM_BIP_Pin, GPIO_PIN_SET);
+			HAL_Delay(100);
+			HAL_GPIO_WritePin(ALARM_BIP_GPIO_Port, ALARM_BIP_Pin, GPIO_PIN_RESET);
+			HAL_Delay(100);
+		}*/
 		HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
 		seconds = RTC_ConvertFromDec(aTxBuffer[0]);
 		minutes = RTC_ConvertFromDec(aTxBuffer[1]);
 		hours = RTC_ConvertFromDec(aTxBuffer[2]);
+		if(clk_mode == ALARM_MODE){
+			HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X07, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 3, 500);
+			minutes = RTC_ConvertFromDec(aTxBuffer[1]);
+			hours = RTC_ConvertFromDec(aTxBuffer[2]);
+		}
 		while(clk_mode == SET_MODE || clk_mode == ALARM_MODE)
 		{
 			HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)0X00, I2C_MEMADD_SIZE_8BIT, aTxBuffer, 7, 500);
@@ -160,6 +181,11 @@ int main(void)
 			tm1637DisplayTime(hours, minutes, seconds%2);
 			HAL_Delay(100);
 		}
+
+		HAL_I2C_Mem_Read(&hi2c2, (uint16_t)(0xD0), (uint16_t)(0X11), I2C_MEMADD_SIZE_8BIT, aTxBuffer, 2, 500);
+		int MSB = aTxBuffer[0];
+		int LSB = aTxBuffer[1];
+		printf("%d\n", MSB);
 
 		tm1637DisplayTime(hours, minutes, 1);
 

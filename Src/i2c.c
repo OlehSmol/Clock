@@ -5,7 +5,7 @@
   *                      of the I2C instances.
   ******************************************************************************
   *
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -93,6 +93,12 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* i2cHandle)
 
     /* Peripheral clock enable */
     __HAL_RCC_I2C2_CLK_ENABLE();
+
+    /* Peripheral interrupt init */
+    HAL_NVIC_SetPriority(I2C2_EV_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(I2C2_EV_IRQn);
+    HAL_NVIC_SetPriority(I2C2_ER_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(I2C2_ER_IRQn);
   /* USER CODE BEGIN I2C2_MspInit 1 */
 
   /* USER CODE END I2C2_MspInit 1 */
@@ -115,6 +121,11 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef* i2cHandle)
     PA10     ------> I2C2_SDA 
     */
     HAL_GPIO_DeInit(GPIOA, GPIO_PIN_9|GPIO_PIN_10);
+
+    /* Peripheral interrupt Deinit*/
+    HAL_NVIC_DisableIRQ(I2C2_EV_IRQn);
+
+    HAL_NVIC_DisableIRQ(I2C2_ER_IRQn);
 
   }
   /* USER CODE BEGIN I2C2_MspDeInit 1 */
